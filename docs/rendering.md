@@ -153,6 +153,7 @@ splatRenderer.fragment = ({ color, position }) => ({
 | `color` | `vec4` | the premultiplied color the draw blends "over" the target; alpha is `color.a` |
 | `position` | `vec3` | the fragment's point on its splat's quad in the eye's view space (camera at the origin, looking down -z) |
 | `index` | `uint` | the splat's index in the drawn collection: object k's splats start at `collection.objects[k].offset`, so an output of it tells which object, and which of its splats, a pixel shows |
+| `opacity` | `float` | the splat's opacity before the falloff, as projected (above 1 for an LoD stretch): a pick can skip faint splats by it |
 
 | `SplatFragmentOutput` field | Type | |
 |---|---|---|

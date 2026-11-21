@@ -56,6 +56,9 @@ export interface SplatFragment {
   // The splat's index in the drawn collection (uint): object k's splats are
   // collection.objects[k].offset onwards, in the object's order
   index: TslNode;
+  // The splat's opacity before the falloff (float), as projected; above 1
+  // for an LoD stretch
+  opacity: TslNode;
 }
 
 // What it gives back, each optional
@@ -142,7 +145,7 @@ function drawNodes({ projection, eyes, projected, order, count, quads, encodeLin
   const viewPoint = modifier ? varyingProperty("vec4", "vSplatViewPoint") : undefined;
   // and the splat's collection index (flat: three interpolates no integer)
   const splatIndex = modifier ? varyingProperty("uint", "vSplatIndex") : undefined;
-  const input = modifier ? { color: property("vec4", "SplatColor"), position: property("vec3", "SplatPosition"), index: property("uint", "SplatIndex") } : undefined;
+  const input = modifier ? { color: property("vec4", "SplatColor"), position: property("vec3", "SplatPosition"), index: property("uint", "SplatIndex"), opacity: property("float", "SplatOpacity") } : undefined;
   const output = modifier?.(input!);
 
   const vertex = Fn(() => {
@@ -220,6 +223,7 @@ function drawNodes({ projection, eyes, projected, order, count, quads, encodeLin
     input.color.assign(vec4(color.mul(alpha), alpha));
     input.position.assign(viewPoint.xyz.div(viewPoint.w));
     input.index.assign(splatIndex);
+    input.opacity.assign(opacity);
     if (output?.discard) {
       If(output.discard, () => {
         Discard();

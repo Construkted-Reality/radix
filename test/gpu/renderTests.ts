@@ -818,6 +818,20 @@ export async function runRenderTests(renderer: WebGPURenderer, check: Check) {
     }
   });
 
+  await check("render: a fragment modifier reads each splat's opacity before the falloff: a cut at 0.5 drops the faint splat only", async () => {
+    const pair = [splat([-0.5, 0, -4], 0.2, [0, 0, 1], 0.3), splat([0.5, 0, -4], 0.2, [0, 0, 1], 0.9)];
+    const camera = makeCamera(renderer);
+    for (const method of METHODS) {
+      const pixels = await drawSplats(renderer, pair, { method, sortMode, fragment: ({ opacity }) => ({ discard: opacity.lessThan(0.5) }) }, camera);
+      const x = (centerX: number) => Math.round((new THREE.Vector3(centerX, 0, -4).project(camera).x * 0.5 + 0.5) * W);
+      const [faint, opaque] = [pixelAt(pixels, x(-0.5), H / 2)[3], pixelAt(pixels, x(0.5), H / 2)[3]];
+      if (faint !== 0 || opaque < 100) {
+        return `${method}: alpha ${faint} at the splat of opacity 0.3, ${opaque} at the one of 0.9; expected 0 and the splat`;
+      }
+    }
+    return undefined;
+  });
+
   await check("render: a renderer that drew nothing before its splats arrived draws them like a new one (CPU order)", async () => {
     for (const method of METHODS) {
       const camera = makeCamera(renderer);
