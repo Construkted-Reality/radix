@@ -53,6 +53,9 @@ export interface SplatFragment {
   // The fragment's point on its splat's quad in the eye's view space (vec3):
   // the camera at the origin, looking down -z
   position: TslNode;
+  // The splat's index in the drawn collection (uint): object k's splats are
+  // collection.objects[k].offset onwards, in the object's order
+  index: TslNode;
 }
 
 // What it gives back, each optional
@@ -137,7 +140,9 @@ function drawNodes({ projection, eyes, projected, order, count, quads, encodeLin
   // Only with a fragment modifier: the quad corner in view space, as a
   // homogeneous point (linear in clip space, so it interpolates exactly)
   const viewPoint = modifier ? varyingProperty("vec4", "vSplatViewPoint") : undefined;
-  const input = modifier ? { color: property("vec4", "SplatColor"), position: property("vec3", "SplatPosition") } : undefined;
+  // and the splat's collection index (flat: three interpolates no integer)
+  const splatIndex = modifier ? varyingProperty("uint", "vSplatIndex") : undefined;
+  const input = modifier ? { color: property("vec4", "SplatColor"), position: property("vec3", "SplatPosition"), index: property("uint", "SplatIndex") } : undefined;
   const output = modifier?.(input!);
 
   const vertex = Fn(() => {
@@ -193,6 +198,7 @@ function drawNodes({ projection, eyes, projected, order, count, quads, encodeLin
     opacity.assign(out.get("opacity"));
     cutoff.assign(out.get("cutoff"));
     viewPoint?.assign(SplatCamera.eye(v).projectionInverse.mul(out.get("position")));
+    splatIndex?.assign(index);
     return out.get("position");
   });
 
@@ -208,11 +214,12 @@ function drawNodes({ projection, eyes, projected, order, count, quads, encodeLin
     });
 
     const color = select(encodeLinear.greaterThan(0.5), sRGBTransferEOTF(rgb), rgb);
-    if (!input || !viewPoint) {
+    if (!input || !viewPoint || !splatIndex) {
       return vec4(color.mul(alpha), alpha);
     }
     input.color.assign(vec4(color.mul(alpha), alpha));
     input.position.assign(viewPoint.xyz.div(viewPoint.w));
+    input.index.assign(splatIndex);
     if (output?.discard) {
       If(output.discard, () => {
         Discard();

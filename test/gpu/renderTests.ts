@@ -16,7 +16,7 @@ import {
   randomSplats, readProjection, readSortKeys, renderPixels, rng, setCamera, splat, splatData, type Check,
 } from "./renderUtils";
 
-const { mrt, vec4 } = TSL;
+const { float, mrt, vec4 } = TSL;
 
 const METHODS = SplatProjection.METHODS;
 const LAYOUTS: SplatLayout[] = ["extSplats", "covSplats", "packedSplats"];
@@ -774,6 +774,47 @@ export async function runRenderTests(renderer: WebGPURenderer, check: Check) {
       target.dispose();
       splatRenderer.dispose();
       arrays.dispose();
+    }
+  });
+
+  await check("render: a fragment modifier's index names each pixel's splat in the collection, across two objects", async () => {
+    const camera = makeCamera(renderer);
+    // Object 0: one splat on the left; object 1: a splat off screen, then one on the right (collection index 2)
+    const left = GpuArrays.fromData(renderer, splatData([splat([-0.5, 0, -4], 0.2, [0, 0, 1], 1)]));
+    const right = GpuArrays.fromData(renderer, splatData([splat([0, 0, 4], 0.2, [0, 0, 1], 1), splat([0.5, 0, -4], 0.2, [0, 0, 1], 1)]));
+    const splatRenderer = makeSplats(renderer, {
+      collection: collectionOf(left, right), sortMode,
+      fragment: ({ index }) => ({ mrt: mrt({ owner: vec4(float(index).add(1), 0, 0, 1) }) }),
+    });
+    const scene3 = new THREE.Scene().add(splatRenderer);
+    const target = new THREE.RenderTarget(W, H, { type: THREE.HalfFloatType, count: 2 });
+    target.textures[0].name = "output";
+    target.textures[1].name = "owner";
+    const frame = async () => {
+      renderer.setRenderTarget(target);
+      renderer.setClearColor(0x000000, 0);
+      renderer.clear();
+      renderer.render(scene3, camera);
+      renderer.setRenderTarget(null);
+      const data = await renderer.readRenderTargetPixelsAsync(target, 0, 0, W, H, 1) as Uint16Array | Float32Array;
+      return data instanceof Uint16Array ? Float32Array.from(data, (h) => Encoding.decodeHalf(h)) : data;
+    };
+    try {
+      await frame();
+      if (!webgpu) {
+        const view = splatRenderer.viewFor(camera);
+        view.apply(await view.sort(camera));
+      }
+      const owners = await frame();
+      const at = (x: number) => owners[(H / 2 * W + Math.round((new THREE.Vector3(x, 0, -4).project(camera).x * 0.5 + 0.5) * W)) * 4];
+      const [first, third, background] = [at(-0.5), at(0.5), owners[(2 * W + 2) * 4]];
+      return first === 1 && third === 3 && background === 0 ? undefined : `owners ${first} and ${third} at the splats, expected 1 and 3 (index + 1); background ${background}`;
+    } finally {
+      renderer.setRenderTarget(null);
+      target.dispose();
+      splatRenderer.dispose();
+      left.dispose();
+      right.dispose();
     }
   });
 
